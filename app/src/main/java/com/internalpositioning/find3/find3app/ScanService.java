@@ -1,8 +1,5 @@
 package com.internalpositioning.find3.find3app;
 
-import android.app.Activity;
-import android.app.Notification;
-import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -14,10 +11,9 @@ import android.location.Location;
 import android.location.LocationManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
+import android.os.Environment;
 import android.os.IBinder;
 import android.util.Log;
-import android.widget.EditText;
-import android.widget.TextView;
 
 import com.android.volley.AuthFailureError;
 import com.android.volley.NetworkResponse;
@@ -33,8 +29,16 @@ import com.android.volley.toolbox.Volley;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Created by zacks on 3/2/2018.
@@ -70,6 +74,8 @@ public class ScanService extends Service {
     private String serverAddress = "";
     private boolean allowGPS = false;
 
+    private File currentSessionResponsesFile;
+
     @Override
     public void onCreate() {
         // The service is being created
@@ -95,6 +101,31 @@ public class ScanService extends Service {
         } catch (Exception e) {
             Log.e(TAG, e.toString());
         }
+
+        // creating new file to save responses from server
+        if (isExternalStorageWritable()) {
+            File appDirectory = new File(getExternalCacheDir()
+                    .getAbsolutePath() + "/respones");
+            File responsesDirectory = new File(appDirectory + "/responses");
+            currentSessionResponsesFile = new File(responsesDirectory,
+                    "session_start_" + System.currentTimeMillis() + ".txt");
+
+            // create app folder
+            if (!appDirectory.exists()) {
+                appDirectory.mkdir();
+            }
+
+            // create responses folder
+            if (!responsesDirectory.exists()) {
+                responsesDirectory.mkdir();
+            }
+        }
+    }
+
+    /* Checks if external storage is available for read and write */
+    private boolean isExternalStorageWritable() {
+        String state = Environment.getExternalStorageState();
+        return Environment.MEDIA_MOUNTED.equals(state);
     }
 
 
@@ -316,6 +347,22 @@ public class ScanService extends Service {
             StringRequest stringRequest = new StringRequest(Request.Method.POST, URL, new Response.Listener<String>() {
                 @Override
                 public void onResponse(String response) {
+                    // save response to the file
+                    try {
+                        FileOutputStream outputStream = new FileOutputStream(currentSessionResponsesFile);
+                        PrintWriter printWriter = new PrintWriter(outputStream);
+                        Date date = new Date();
+                        String strDateFormat = "dd-MM-yyyy hh:mm:ss";
+                        DateFormat dateFormat = new SimpleDateFormat(strDateFormat, Locale.getDefault());
+                        String formattedDate= dateFormat. format(date);
+                        StringBuilder stringBuilder = new StringBuilder(formattedDate).append(":\n");
+                        stringBuilder.append(response);
+                        stringBuilder.append("\n");
+                        printWriter.print(stringBuilder.toString());
+                    } catch (FileNotFoundException e) {
+                        e.printStackTrace();
+                        Log.d(TAG, "Could not write received data in file.");
+                    }
                     Log.d(TAG, response);
                 }
             }, new Response.ErrorListener() {
